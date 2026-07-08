@@ -43,8 +43,7 @@ MAGIC_SIGNATURES = {
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-import secrets
-app.config["SECRET_KEY"] = secrets.token_hex(32)
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
 if not app.config["SECRET_KEY"]:
     raise RuntimeError(
         "SECRET_KEY environment variable must be set (used for CSRF protection). "
