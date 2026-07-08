@@ -1,0 +1,18 @@
+services:
+  sync:
+    build: .
+    container_name: druckstudio-upload-pc
+    restart: unless-stopped
+    environment:
+      - SYNC_FOLDER=/data/synced-uploads
+      - ARCHIVE_FOLDER=/data/archive
+      - MOVER_POLL_SECONDS=5
+    volumes:
+      - ./data/synced-uploads:/data/synced-uploads
+      - ./data/archive:/data/archive
+      - ./data/syncthing-config:/data/syncthing-config
+    ports:
+      - "127.0.0.1:8384:8384"   # Syncthing web UI - open http://localhost:8384 for first-time pairing
+      - "22000:22000/tcp"
+      - "22000:22000/udp"
+      - "21027:21027/udp"

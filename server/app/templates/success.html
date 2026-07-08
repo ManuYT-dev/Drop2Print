@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Danke – Druckstudio Strauss{% endblock %}
+{% block content %}
+  <h1>Danke!</h1>
+  <p class="lede">Ihre Unterlagen wurden übermittelt und werden in Kürze bearbeitet.</p>
+  <a class="submit-btn" href="{{ url_for('upload') }}">Weiteren Auftrag senden</a>
+{% endblock %}

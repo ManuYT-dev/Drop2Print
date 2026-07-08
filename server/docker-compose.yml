@@ -1,0 +1,25 @@
+services:
+  app:
+    build: .
+    container_name: druckstudio-upload-server
+    restart: unless-stopped
+    env_file:
+      # Optional - only needed if you want to set your own SECRET_KEY.
+      # If this file doesn't exist or doesn't set SECRET_KEY, the
+      # container generates one on first start and reuses it from then on
+      # (stored in ./data/secret_key).
+      - path: .env
+        required: false
+    environment:
+      - UPLOAD_FOLDER=/data/uploads
+      - MAX_AGE_DAYS=1
+      - CLEANUP_INTERVAL_SECONDS=3600
+    volumes:
+      - ./data/uploads:/data/uploads
+      - ./data/syncthing-config:/data/syncthing-config
+    ports:
+      - "127.0.0.1:8000:8000"   # Flask app - only reachable via host Nginx (HTTPS)
+      - "127.0.0.1:8384:8384"   # Syncthing web UI - localhost only, use an SSH tunnel to reach it
+      - "22000:22000/tcp"        # Syncthing sync protocol - must stay reachable for the PC to connect
+      - "22000:22000/udp"
+      - "21027:21027/udp"        # Syncthing local discovery (harmless to leave open)

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Druckstudio Strauss – Auftragsformular{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="page">
+    <header class="site-header">
+      <a class="brand" href="https://www.straussdruck.at/" target="_blank" rel="noopener noreferrer" aria-label="Zur Website von Druckstudio Strauss">
+        <img src="{{ url_for('static', filename='logo-placeholder.png') }}" alt="Druckstudio Strauss Logo" class="brand-logo">
+        <span class="brand-text">Druckstudio&nbsp;Strauss</span>
+      </a>
+      <span class="eyebrow">
+        <span class="cmyk-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        Auftragsformular
+      </span>
+    </header>
+
+    <main class="card">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <ul class="flash-list">
+            {% for category, message in messages %}
+              <li class="flash flash-{{ category }}">{{ message }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+      <span>Druckstudio Strauss · Reichsstraße 163 · 6800 Feldkirch</span>
+    </footer>
+  </div>
+</body>
+</html>

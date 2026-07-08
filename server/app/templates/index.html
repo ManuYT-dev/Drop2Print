@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>Datei-Upload</h1>
+  <p class="lede">Bitte Name, Anmerkungen und die gewünschten Dateien angeben.</p>
+
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {{ form.hidden_tag() }}
+
+    <div class="field">
+      <label for="{{ form.name.id }}">Name</label>
+      {{ form.name(placeholder="Vor- und Nachname") }}
+      {% for error in form.name.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+    </div>
+
+    <div class="field">
+      <label for="uploads">Dateien</label>
+      <input type="file" id="uploads" name="uploads" multiple required
+             accept=".pdf,.docx,.png,.jpg,.jpeg,.gif,.webp,application/pdf,image/*">
+      <span class="hint">Erlaubt: PDF, DOCX, JPG, PNG, GIF, WEBP</span>
+    </div>
+
+    <div class="field">
+      <label for="{{ form.info.id }}">Zusätzliche Informationen</label>
+      {{ form.info(placeholder="z. B. Format, Auflage, Bindung, Liefertermin …", rows="5") }}
+      {% for error in form.info.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+    </div>
+
+    <button type="submit" class="submit-btn">Absenden</button>
+  </form>
+{% endblock %}
