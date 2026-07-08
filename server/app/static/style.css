@@ -282,3 +282,79 @@ a:focus-visible {
     transition: none;
   }
 }
+
+/* --- Custom File Upload UI --- */
+
+.drop-zone {
+  border: 2px dashed var(--line);
+  border-radius: var(--radius);
+  padding: 32px 16px;
+  text-align: center;
+  background: var(--paper);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+  font-family: var(--font-body);
+  font-size: 15px;
+}
+
+.drop-zone:hover {
+  border-color: var(--accent);
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.file-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: grid;
+  gap: 8px;
+  width: 100%;       /* Sets the outer wall constraint */
+  max-width: 100%;
+}
+
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-family: var(--font-body);
+
+  /* Forces the item container to stay inside the form boundaries */
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;  /* Hard safety cutoff */
+}
+
+.file-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  /* Flexbox explicit sizing rules */
+  flex: 1;
+  min-width: 0;
+  margin-right: 12px;
+}
+
+.remove-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--error);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: opacity 0.15s ease;
+}
+
+.remove-btn:hover {
+  opacity: 0.7;
+}
