@@ -24,7 +24,11 @@ COPY app/ /app/
 COPY docker/entrypoint.sh /entrypoint.sh
 COPY docker/cleanup_loop.sh /scripts/cleanup_loop.sh
 COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
-RUN chmod +x /entrypoint.sh /scripts/cleanup_loop.sh
+# Strip Windows line endings in case the files were checked out/edited on
+# Windows - a CRLF shebang line makes Linux report "no such file or
+# directory" even though the file clearly exists.
+RUN sed -i 's/\r$//' /entrypoint.sh /scripts/cleanup_loop.sh \
+    && chmod +x /entrypoint.sh /scripts/cleanup_loop.sh
 
 VOLUME ["/data"]
 EXPOSE 8000

@@ -3,86 +3,53 @@
   <h1>Datei-Upload</h1>
   <p class="lede">Bitte Name, Anmerkungen und die gewünschten Dateien angeben.</p>
 
-  <form method="post" enctype="multipart/form-data" novalidate id="upload-form">
+  <ul id="formErrors" class="flash-list" hidden></ul>
+
+  <form method="post" enctype="multipart/form-data" id="uploadForm" novalidate>
     {{ form.hidden_tag() }}
 
     <div class="field">
-      <label for="{{ form.name.id }}">Name</label>
+      <label for="{{ form.name.id }}">Name <span class="required-mark">*</span></label>
       {{ form.name(placeholder="Vor- und Nachname") }}
+      <span class="field-error" id="nameError" hidden>Bitte Namen angeben.</span>
       {% for error in form.name.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
     </div>
 
     <div class="field">
-      <label>Dateien (Max. 10)</label>
-
-      <div id="drop-zone" class="drop-zone">
-        <span>Klicken Sie hier, um Dateien hinzuzufügen</span>
-        <input type="file" id="uploads" name="uploads" multiple required
-               accept=".pdf,.docx,.png,.jpg,.jpeg,.gif,.webp,application/pdf,image/*"
-               style="display: none;">
-      </div>
-
-      <ul id="file-list" class="file-list"></ul>
-
-      <span class="hint">Erlaubt: PDF, DOCX, JPG, PNG, GIF, WEBP</span>
+      <label for="uploads">Dateien <span class="required-mark">*</span></label>
+      <label class="file-drop" for="uploads" id="fileDropLabel">
+        <span class="file-drop-text">Klicken, um Dateien auszuwählen</span>
+      </label>
+      <input type="file" id="uploads" name="uploads" multiple class="file-input-visually-hidden"
+             accept=".pdf,.docx,.png,.jpg,.jpeg,.gif,.webp,application/pdf,image/*">
+      <span class="hint">Erlaubt: PDF, DOCX, JPG, PNG, GIF, WEBP · max. 10 Dateien · max. 15 MB je Datei · max. 50 MB gesamt</span>
+      <span class="field-error" id="filesError" hidden>Bitte mindestens eine Datei auswählen.</span>
+      <ul id="fileList" class="file-list"></ul>
+      <ul id="rejectedList" class="file-list file-list-rejected"></ul>
     </div>
 
     <div class="field">
-      <label for="{{ form.info.id }}">Zusätzliche Informationen</label>
+      <label for="{{ form.info.id }}">Zusätzliche Informationen <span class="optional-mark">(optional)</span></label>
       {{ form.info(placeholder="z. B. Format, Auflage, Bindung, Liefertermin …", rows="5") }}
       {% for error in form.info.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
     </div>
 
-    <button type="submit" class="submit-btn">Absenden</button>
+    <button type="submit" class="submit-btn" id="submitBtn">Absenden</button>
   </form>
 
-  <script>
-    const MAX_FILES = 10;
-    const fileInput = document.getElementById('uploads');
-    const fileListContainer = document.getElementById('file-list');
-    const dropZone = document.getElementById('drop-zone');
+  <div id="successModal" class="modal-overlay" hidden>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <p class="modal-eyebrow">
+        <span class="cmyk-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        Erfolgreich
+      </p>
+      <h2 id="modalTitle">Upload erfolgreich</h2>
+      <p>Ihre Unterlagen wurden übermittelt und werden in Kürze bearbeitet.</p>
+      <button type="button" id="modalReturnBtn" class="submit-btn">Zurück</button>
+    </div>
+  </div>
+{% endblock %}
 
-    let dataTransfer = new DataTransfer();
-
-    dropZone.addEventListener('click', () => fileInput.click());
-
-    fileInput.addEventListener('change', function() {
-      for (let i = 0; i < this.files.length; i++) {
-        if (dataTransfer.items.length >= MAX_FILES) {
-          alert(`Maximal ${MAX_FILES} Dateien erlaubt.`);
-          break;
-        }
-        dataTransfer.items.add(this.files[i]);
-      }
-      updateInputAndUI();
-    });
-
-    function updateInputAndUI() {
-      fileInput.files = dataTransfer.files;
-      fileListContainer.innerHTML = '';
-
-      // Rebuild the visual list
-      for (let i = 0; i < dataTransfer.files.length; i++) {
-        const file = dataTransfer.files[i];
-        const li = document.createElement('li');
-        li.className = 'file-item';
-        li.innerHTML = `
-          <span class="file-name">${file.name}</span>
-          <button type="button" class="remove-btn" onclick="removeFile(${i})">&times;</button>
-        `;
-        fileListContainer.appendChild(li);
-      }
-    }
-
-    window.removeFile = function(index) {
-      const newDataTransfer = new DataTransfer();
-      for (let i = 0; i < dataTransfer.files.length; i++) {
-        if (i !== index) {
-          newDataTransfer.items.add(dataTransfer.files[i]);
-        }
-      }
-      dataTransfer = newDataTransfer;
-      updateInputAndUI();
-    };
-  </script>
+{% block scripts %}
+  <script src="{{ url_for('static', filename='upload.js') }}" defer></script>
 {% endblock %}

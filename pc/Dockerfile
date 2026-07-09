@@ -17,7 +17,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY docker/file_mover.py /scripts/file_mover.py
 COPY docker/entrypoint.sh /entrypoint.sh
 COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
-RUN chmod +x /entrypoint.sh /scripts/file_mover.py
+RUN sed -i 's/\r$//' /entrypoint.sh \
+    && chmod +x /entrypoint.sh /scripts/file_mover.py
 
 VOLUME ["/data"]
 
