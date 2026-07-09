@@ -14,11 +14,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get purge -y gnupg2 && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
-COPY docker/file_mover.py /scripts/file_mover.py
 COPY docker/entrypoint.sh /entrypoint.sh
 COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
 RUN sed -i 's/\r$//' /entrypoint.sh \
-    && chmod +x /entrypoint.sh /scripts/file_mover.py
+    && chmod +x /entrypoint.sh
 
 VOLUME ["/data"]
 

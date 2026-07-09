@@ -9,7 +9,6 @@ services:
       - MOVER_POLL_SECONDS=5
     volumes:
       - ./data/synced-uploads:/data/synced-uploads
-      - ./data/archive:/data/archive
       - ./data/syncthing-config:/data/syncthing-config
     ports:
       - "127.0.0.1:8384:8384"   # Syncthing web UI - open http://localhost:8384 for first-time pairing

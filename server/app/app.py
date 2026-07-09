@@ -29,7 +29,6 @@ MAX_FILES = int(os.environ.get("MAX_FILES", 10))
 MAX_FILE_SIZE_BYTES = int(os.environ.get("MAX_FILE_SIZE_BYTES", 15 * 1024 * 1024))  # 15 MB per file
 MAX_TOTAL_SIZE_BYTES = int(os.environ.get("MAX_TOTAL_SIZE_BYTES", 50 * 1024 * 1024))  # 50 MB per submission
 ALLOWED_EXTENSIONS = {"pdf", "docx", "png", "jpg", "jpeg", "gif", "webp"}
-COMPLETE_MARKER = "_complete.flag"
 
 # Magic-byte signatures, checked in addition to the file extension so a
 # renamed .exe can't slip through as a ".pdf".
@@ -189,27 +188,21 @@ def upload():
 
         folder_name = safe_folder_name(form.name.data)
         target_dir = UPLOAD_ROOT / folder_name
-        target_dir.mkdir(parents=True, exist_ok=False)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        today = datetime.today().strftime("%Y%m%d")
 
         for index, (f, ext) in enumerate(validated):
             filename = secure_filename(f.filename) or f"datei_{index}.{ext}"
-            destination = target_dir / filename
-            if destination.exists():
-                destination = target_dir / f"{destination.stem}_{index}{destination.suffix}"
+            destination = target_dir / f"{today}_{filename}"
             f.save(destination)
 
-        info_path = target_dir / "info.txt"
+        info_path = target_dir / f"{today}_info.txt"
         info_path.write_text(
             f"Name: {form.name.data}\n"
             f"Zusätzliche Informationen: {form.info.data or '-'}\n"
             f"Eingegangen: {datetime.now().isoformat(timespec='seconds')}\n",
             encoding="utf-8",
         )
-
-        # Written last, on purpose: this is the signal the PC-side mover
-        # script waits for before it moves a submission out of the synced
-        # folder, so nothing gets picked up half-finished.
-        (target_dir / COMPLETE_MARKER).touch()
 
         if ajax:
             return jsonify(success=True)
