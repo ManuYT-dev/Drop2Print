@@ -12,7 +12,11 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import zipfile
+import smtplib
+import mimetypes
+from email.message import EmailMessage
 from datetime import datetime
 from pathlib import Path
 
@@ -23,12 +27,27 @@ from werkzeug.utils import secure_filename
 from wtforms import StringField, TextAreaField
 from wtforms.validators import DataRequired, Length
 
+# Force Python stdout to flush instantly so logs never get buffered inside Docker
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
+
+# --- Environment Variables ---
 UPLOAD_ROOT = Path(os.environ.get("UPLOAD_FOLDER", "/data/uploads"))
-MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH_BYTES", 60 * 1024 * 1024))  # 60 MB, hard backstop
+MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH_BYTES", 60 * 1024 * 1024))
 MAX_FILES = int(os.environ.get("MAX_FILES", 10))
-MAX_FILE_SIZE_BYTES = int(os.environ.get("MAX_FILE_SIZE_BYTES", 15 * 1024 * 1024))  # 15 MB per file
-MAX_TOTAL_SIZE_BYTES = int(os.environ.get("MAX_TOTAL_SIZE_BYTES", 50 * 1024 * 1024))  # 50 MB per submission
+MAX_FILE_SIZE_BYTES = int(os.environ.get("MAX_FILE_SIZE_BYTES", 20 * 1024 * 1024))
+MAX_TOTAL_SIZE_BYTES = int(os.environ.get("MAX_TOTAL_SIZE_BYTES", 200 * 1024 * 1024))
 ALLOWED_EXTENSIONS = {"pdf", "docx", "png", "jpg", "jpeg", "gif", "webp"}
+
+# --- Email Configuration ---
+ENABLE_EMAIL = os.environ.get("ENABLE_EMAIL", "false").lower() == "true"
+SMTP_HOST = os.environ.get("SMTP_HOST", "")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_FROM = os.environ.get("SMTP_FROM", "")
+SMTP_TO = os.environ.get("SMTP_TO", "")
+SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "true").lower() == "true"
 
 # Magic-byte signatures, checked in addition to the file extension so a
 # renamed .exe can't slip through as a ".pdf".
@@ -47,6 +66,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
 if not app.config["SECRET_KEY"]:
+    print("[CRITICAL] SECRET_KEY environment variable is not set!")
     raise RuntimeError(
         "SECRET_KEY environment variable must be set (used for CSRF protection). "
         "Generate one with: python3 -c \"import secrets; print(secrets.token_hex(32))\""
@@ -79,9 +99,11 @@ def verify_file_signature(file_storage, ext: str) -> bool:
 
     sigs = MAGIC_SIGNATURES.get(ext, [])
     if not any(header.startswith(sig) for sig in sigs):
+        print(f"[WARNING] Magic bytes mismatch for extension .{ext}. Header bytes: {header}")
         return False
 
     if ext == "webp" and header[8:12] != b"WEBP":
+        print(f"[WARNING] File claimed .webp but missing WEBP magic bytes in header chunks.")
         return False
 
     if ext == "docx":
@@ -93,8 +115,10 @@ def verify_file_signature(file_storage, ext: str) -> bool:
                 names = zf.namelist()
             file_storage.stream.seek(0)
             if not any(n.startswith("word/") for n in names):
+                print(f"[WARNING] File is valid ZIP container but does not look like OOXML Word document structure.")
                 return False
         except zipfile.BadZipFile:
+            print(f"[WARNING] Corrupted or invalid ZIP layout for claimed .docx file.")
             return False
 
     return True
@@ -123,10 +147,80 @@ def reject(ajax: bool, form, message: str):
     already typed - for the AJAX path that's automatic (no page reload
     happens at all); for the no-JS fallback, WTForms re-renders the form
     with the submitted values still filled in."""
+    print(f"[REJECT] Order rejected. Reason: {message}")
     if ajax:
         return jsonify(success=False, errors=[message]), 400
     flash(message, "error")
     return render_template("index.html", form=form)
+
+
+def send_order_notification(customer_name: str, additional_info: str, file_paths: list[Path]):
+    """Sends an email notification with attached files if ENABLE_EMAIL is set to true."""
+    if not ENABLE_EMAIL:
+        print("[INFO] Email notifications are disabled via configuration (ENABLE_EMAIL=false).")
+        return
+
+    print(f"[INFO] Initiating outbound notification email for customer: '{customer_name}'")
+    msg = EmailMessage()
+    msg["Subject"] = f"Neuer Drop2Print Auftrag: {customer_name}"
+    msg["From"] = SMTP_FROM
+    msg["To"] = SMTP_TO
+
+    body = (
+        f"Ein neuer Auftrag wurde über Drop2Print hochgeladen.\n\n"
+        f"Kunde: {customer_name}\n"
+        f"Dateien: {len(file_paths)} im Anhang beigefügt\n\n"
+        f"Zusätzliche Informationen:\n{additional_info or '-'}\n"
+    )
+    msg.set_content(body)
+
+    # --- Read and attach each file ---
+    for path in file_paths:
+        if not path.is_file():
+            print(f"[WARNING] Skipping missing file attachment target: {path}")
+            continue
+
+        ctype, encoding = mimetypes.guess_type(str(path))
+        if ctype is None or encoding is not None:
+            ctype = "application/octet-stream"
+
+        maintype, subtype = ctype.split("/", 1)
+
+        try:
+            file_data = path.read_bytes()
+            msg.add_attachment(
+                file_data,
+                maintype=maintype,
+                subtype=subtype,
+                filename=path.name
+            )
+            print(f"[INFO] Appended file asset to email message payload: {path.name} ({len(file_data)} bytes)")
+        except Exception as ae:
+            print(f"[ERROR] Could not safely append file binary {path.name} to email payload: {ae}")
+
+    # --- Network Transmission ---
+    try:
+        print(f"[INFO] Establishing connection to SMTP endpoint: {SMTP_HOST}:{SMTP_PORT}")
+        if SMTP_PORT == 465:
+            print("[INFO] Using SMTP_SSL implicit encrypted handshake configuration.")
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
+                if SMTP_USER and SMTP_PASSWORD:
+                    print(f"[INFO] Performing SMTP authentication for user account: {SMTP_USER}")
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                server.send_message(msg)
+        else:
+            print("[INFO] Using standard SMTP plain connection protocol.")
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+                if SMTP_USE_TLS:
+                    print("[INFO] Triggering explicit STARTTLS upgrade handshake.")
+                    server.starttls()
+                if SMTP_USER and SMTP_PASSWORD:
+                    print(f"[INFO] Performing SMTP authentication for user account: {SMTP_USER}")
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                server.send_message(msg)
+        print(f"[INFO] Email notification with all attachments transmitted successfully for {customer_name}")
+    except Exception as e:
+        print(f"[ERROR] Transmission failure during SMTP delivery sequence: {e}")
 
 
 @app.after_request
@@ -143,37 +237,41 @@ def upload():
     ajax = wants_json()
 
     if request.method == "POST":
-        # Missing/invalid required fields (e.g. empty Name). Nothing typed
-        # anywhere is lost: the AJAX path never reloads the page at all,
-        # and the no-JS fallback re-renders this same `form` object, which
-        # WTForms fills back in with whatever the user already entered.
+        print(f"\n[SUBMISSION] Received incoming submission request (AJAX={ajax})")
+
         if not form.validate():
+            print(f"[REJECT] Base fields failed WTForms validation check. Errors: {form.errors}")
             if ajax:
                 return jsonify(success=False, errors=flatten_form_errors(form)), 400
             for message in flatten_form_errors(form):
                 flash(message, "error")
             return render_template("index.html", form=form)
 
+        print(f"[INFO] Form validated. Customer Name: '{form.name.data}'")
         files = [f for f in request.files.getlist("uploads") if f and f.filename]
 
         if not files:
             return reject(ajax, form, "Bitte mindestens eine Datei auswählen.")
 
+        print(f"[INFO] User payload contains {len(files)} files to evaluate.")
         if len(files) > MAX_FILES:
             return reject(ajax, form, f"Zu viele Dateien (maximal {MAX_FILES}).")
 
         validated = []
         total_size = 0
         for f in files:
+            print(f"[PROCESSING] Checking security metadata for: '{f.filename}'")
             ext = allowed_extension(f.filename)
             if not ext:
                 return reject(ajax, form, f"Dateityp nicht erlaubt: {f.filename}")
+
             if not verify_file_signature(f, ext):
                 return reject(ajax, form, f"Datei ungültig oder beschädigt: {f.filename}")
 
             f.stream.seek(0, os.SEEK_END)
             size = f.stream.tell()
             f.stream.seek(0)
+            print(f"[INFO] Verified file profile: '{f.filename}' (Parsed size: {size} bytes)")
 
             if size > MAX_FILE_SIZE_BYTES:
                 limit_mb = MAX_FILE_SIZE_BYTES // (1024 * 1024)
@@ -186,17 +284,24 @@ def upload():
 
             validated.append((f, ext))
 
+        # --- Base Security Verification Clean, Executing Save Structure ---
         folder_name = safe_folder_name(form.name.data)
         target_dir = UPLOAD_ROOT / folder_name
+        print(f"[DISK] Resolving deployment targets. Target Directory: '{target_dir}'")
         target_dir.mkdir(parents=True, exist_ok=True)
         today = datetime.today().strftime("%Y%m%d")
+
+        saved_file_paths = []
 
         for index, (f, ext) in enumerate(validated):
             filename = secure_filename(f.filename) or f"datei_{index}.{ext}"
             destination = target_dir / f"{today}_{filename}"
+            print(f"[DISK] Committing raw upload asset stream to safe path: {destination}")
             f.save(destination)
+            saved_file_paths.append(destination)
 
         info_path = target_dir / f"{today}_info.txt"
+        print(f"[DISK] Creating job metadata file descriptor: {info_path}")
         info_path.write_text(
             f"Name: {form.name.data}\n"
             f"Zusätzliche Informationen: {form.info.data or '-'}\n"
@@ -204,6 +309,19 @@ def upload():
             encoding="utf-8",
         )
 
+        # Drop the sync flag so Syncthing and background movers know data ingestion is fully complete
+        flag_path = target_dir / "_complete.flag"
+        print(f"[DISK] Drops complete. Writing deployment lock trigger: {flag_path}")
+        flag_path.write_text(f"Completed at: {datetime.now().isoformat()}\n", encoding="utf-8")
+
+        # Fire off the email notification
+        send_order_notification(
+            customer_name=form.name.data,
+            additional_info=form.info.data,
+            file_paths=saved_file_paths
+        )
+
+        print("[SUCCESS] All files processed and successfully committed to disk architecture.")
         if ajax:
             return jsonify(success=True)
         return redirect(url_for("success"))
@@ -224,6 +342,7 @@ def robots():
 @app.errorhandler(413)
 def too_large(_error):
     max_mb = MAX_CONTENT_LENGTH // (1024 * 1024)
+    print(f"[REJECT] Hard HTTP Gateway backstop reached! Total request context footprint exceeded {max_mb} MB.")
     return render_template("error.html", message=f"Die Dateien sind zu groß (Limit: {max_mb} MB)."), 413
 
 
@@ -233,4 +352,5 @@ def healthz():
 
 
 if __name__ == "__main__":
+    print("[START] Firing up Drop2Print Web Application Engine core service.")
     app.run(host="0.0.0.0", port=8000, debug=False)

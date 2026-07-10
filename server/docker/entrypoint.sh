@@ -18,8 +18,20 @@ if [ -z "${SECRET_KEY:-}" ]; then
         python3 -c "import secrets; print(secrets.token_hex(32))" > "$SECRET_KEY_FILE"
         chmod 600 "$SECRET_KEY_FILE"
     fi
-    export SECRET_KEY="$(cat "$SECRET_KEY_FILE")"
+    SECRET_KEY="$(cat "$SECRET_KEY_FILE")"
+    export SECRET_KEY
 fi
+
+case "$(printf '%s' "${ENABLE_SYNCTHING:-true}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on)
+        SYNCTHING_AUTOSTART=true
+        ;;
+    *)
+        SYNCTHING_AUTOSTART=false
+        ;;
+esac
+export SYNCTHING_AUTOSTART
+echo "[entrypoint] Syncthing autostart: $SYNCTHING_AUTOSTART"
 
 (
     sleep 5
