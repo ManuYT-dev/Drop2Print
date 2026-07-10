@@ -1,13 +1,16 @@
 (function () {
   "use strict";
 
-  // Mirrors the server-side limits in app.py - keep these in sync.
-  var ALLOWED_EXTENSIONS = ["pdf", "docx", "png", "jpg", "jpeg", "gif", "webp"];
-  var MAX_FILES = 10;
-  var MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB per file
-  var MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB per submission
-
+// 1. Get the form FIRST using the exact correct ID
   var form = document.getElementById("uploadForm");
+
+  // 2. Read the dynamic limits from the HTML data attributes
+  var ALLOWED_EXTENSIONS = JSON.parse(form.dataset.allowedExtensions);
+  var MAX_FILES = parseInt(form.dataset.maxFiles, 10);
+  var MAX_FILE_SIZE_BYTES = parseInt(form.dataset.maxFileSize, 10);
+  var MAX_TOTAL_SIZE_BYTES = parseInt(form.dataset.maxTotalSize, 10);
+
+  // 3. Get the rest of the elements
   var nameInput = document.getElementById("name");
   var fileInput = document.getElementById("uploads");
   var fileListEl = document.getElementById("fileList");

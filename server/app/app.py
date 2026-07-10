@@ -151,7 +151,12 @@ def reject(ajax: bool, form, message: str):
     if ajax:
         return jsonify(success=False, errors=[message]), 400
     flash(message, "error")
-    return render_template("index.html", form=form)
+    return render_template("index.html",
+                           form=form,
+                           max_files=MAX_FILES,
+                           max_file_size=MAX_FILE_SIZE_BYTES,
+                           max_total_size=MAX_TOTAL_SIZE_BYTES,
+                           allowed_extensions=list(ALLOWED_EXTENSIONS))
 
 
 def send_order_notification(customer_name: str, additional_info: str, file_paths: list[Path]):
@@ -294,7 +299,12 @@ def upload():
                 return jsonify(success=False, errors=flatten_form_errors(form)), 400
             for message in flatten_form_errors(form):
                 flash(message, "error")
-            return render_template("index.html", form=form)
+            return render_template("index.html",
+                                   form=form,
+                                   max_files=MAX_FILES,
+                                   max_file_size=MAX_FILE_SIZE_BYTES,
+                                   max_total_size=MAX_TOTAL_SIZE_BYTES,
+                                   allowed_extensions=list(ALLOWED_EXTENSIONS))
 
         print(f"[INFO] Form validated. Customer Name: '{form.name.data}'")
         files = [f for f in request.files.getlist("uploads") if f and f.filename]
@@ -374,7 +384,12 @@ def upload():
             return jsonify(success=True)
         return redirect(url_for("success"))
 
-    return render_template("index.html", form=form)
+    return render_template("index.html",
+                           form=form,
+                           max_files=MAX_FILES,
+                           max_file_size=MAX_FILE_SIZE_BYTES,
+                           max_total_size=MAX_TOTAL_SIZE_BYTES,
+                           allowed_extensions=list(ALLOWED_EXTENSIONS))
 
 
 @app.route("/erfolg")

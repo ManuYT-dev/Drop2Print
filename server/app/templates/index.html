@@ -5,7 +5,11 @@
 
   <ul id="formErrors" class="flash-list" hidden></ul>
 
-  <form method="post" enctype="multipart/form-data" id="uploadForm" novalidate>
+  <form method="post" enctype="multipart/form-data" id="uploadForm" novalidate
+      data-max-files="{{ max_files }}"
+      data-max-file-size="{{ max_file_size }}"
+      data-max-total-size="{{ max_total_size }}"
+      data-allowed-extensions='{{ allowed_extensions | tojson }}'>
     {{ form.hidden_tag() }}
 
     <div class="field">
@@ -22,7 +26,12 @@
       </label>
       <input type="file" id="uploads" name="uploads" multiple class="file-input-visually-hidden"
              accept=".pdf,.docx,.png,.jpg,.jpeg,.gif,.webp,application/pdf,image/*">
-      <span class="hint">Erlaubt: PDF, DOCX, JPG, PNG, GIF, WEBP · max. 10 Dateien · max. 15 MB je Datei · max. 50 MB gesamt</span>
+      <span class="hint">
+        Erlaubt: {{ allowed_extensions | map('upper') | join(', ') }} ·
+        max. {{ max_files }} Dateien ·
+        max. {{ max_file_size // 1024 // 1024 }} MB je Datei ·
+        max. {{ max_total_size // 1024 // 1024 }} MB gesamt
+      </span>
       <span class="field-error" id="filesError" hidden>Bitte mindestens eine Datei auswählen.</span>
       <ul id="fileList" class="file-list"></ul>
       <ul id="rejectedList" class="file-list file-list-rejected"></ul>
