@@ -4,9 +4,7 @@ Druckstudio Strauss - Auftragsformular
 Small Flask app: one form (Name, Dateien, Zusaetzliche Informationen).
 Every submission is written to its own timestamped folder under
 UPLOAD_FOLDER so it can be picked up by Syncthing and mirrored to the
-office PC. A "_complete.flag" file is written last, once every upload
-has fully landed on disk, so the PC-side mover script never grabs a
-folder that is still mid-sync.
+office PC.
 """
 from __future__ import annotations
 
@@ -16,6 +14,8 @@ import sys
 import zipfile
 import smtplib
 import mimetypes
+import threading
+import py_impose
 from email.message import EmailMessage
 from datetime import datetime
 from pathlib import Path
@@ -223,6 +223,55 @@ def send_order_notification(customer_name: str, additional_info: str, file_paths
         print(f"[ERROR] Transmission failure during SMTP delivery sequence: {e}")
 
 
+# =====================================================================
+# BACKGROUND WORKER
+# =====================================================================
+def process_and_notify_background(flask_app, target_dir, today, files_to_process, customer_name, additional_info):
+    """
+    Runs in the background. Takes temporary file paths, converts them to PDFs,
+    cleans up the temp files, writes the text file, and sends the email.
+    """
+    with flask_app.app_context():
+        saved_file_paths = []
+
+        for temp_path, original_filename, destination in files_to_process:
+            try:
+                print(f"[PY-IMPOSE] Loading pages from {temp_path}")
+                loader = py_impose.FileLoader(str(temp_path))
+                pages = loader.load()
+
+                print(f"[DISK] Exporting PDF to safe path: {destination}")
+                exporter = py_impose.PDFExporter()
+                exporter.add_pages(pages)
+                exporter.write(str(destination))
+
+                saved_file_paths.append(destination)
+            except Exception as e:
+                print(f"[ERROR] Failed processing {original_filename}: {e}")
+            finally:
+                # Cleanup: Always delete the raw temp file from the disk
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+
+        # Write the customer information to a text file
+        info_path = target_dir / f"{today}_info.txt"
+        print(f"[DISK] Creating job metadata file descriptor: {info_path}")
+        info_path.write_text(
+            f"Name: {customer_name}\n"
+            f"Zusätzliche Informationen: {additional_info or '-'}\n"
+            f"Eingegangen: {datetime.now().isoformat(timespec='seconds')}\n",
+            encoding="utf-8",
+        )
+
+        # Fire off the email notification
+        send_order_notification(
+            customer_name=customer_name,
+            additional_info=additional_info,
+            file_paths=saved_file_paths
+        )
+        print("[SUCCESS] Background processing complete.")
+
+
 @app.after_request
 def set_security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -291,37 +340,36 @@ def upload():
         target_dir.mkdir(parents=True, exist_ok=True)
         today = datetime.today().strftime("%Y%m%d")
 
-        saved_file_paths = []
-
+        # 1. DUMP STREAMS TO DISK SYNCHRONOUSLY
+        files_to_process = []
         for index, (f, ext) in enumerate(validated):
-            filename = secure_filename(f.filename) or f"datei_{index}.{ext}"
-            destination = target_dir / f"{today}_{filename}"
-            print(f"[DISK] Committing raw upload asset stream to safe path: {destination}")
-            f.save(destination)
-            saved_file_paths.append(destination)
+            original_filename = secure_filename(f.filename) or f"datei_{index}.{ext}"
+            pdf_filename = Path(original_filename).with_suffix('.pdf')
+            destination = target_dir / f"{today}_{pdf_filename}"
+            temp_path = target_dir / f"temp_{today}_{original_filename}"
 
-        info_path = target_dir / f"{today}_info.txt"
-        print(f"[DISK] Creating job metadata file descriptor: {info_path}")
-        info_path.write_text(
-            f"Name: {form.name.data}\n"
-            f"Zusätzliche Informationen: {form.info.data or '-'}\n"
-            f"Eingegangen: {datetime.now().isoformat(timespec='seconds')}\n",
-            encoding="utf-8",
+            print(f"[DISK] Saving temporary raw stream to: {temp_path}")
+            f.save(temp_path)
+
+            files_to_process.append((temp_path, original_filename, destination))
+
+        # 2. START THE BACKGROUND THREAD
+        print("[INFO] Passing processing payload to background thread.")
+        thread = threading.Thread(
+            target=process_and_notify_background,
+            args=(
+                app, # Pass the Flask app object to retain context
+                target_dir,
+                today,
+                files_to_process,
+                form.name.data,
+                form.info.data
+            )
         )
+        thread.start()
 
-        # Drop the sync flag so Syncthing and background movers know data ingestion is fully complete
-        flag_path = target_dir / "_complete.flag"
-        print(f"[DISK] Drops complete. Writing deployment lock trigger: {flag_path}")
-        flag_path.write_text(f"Completed at: {datetime.now().isoformat()}\n", encoding="utf-8")
-
-        # Fire off the email notification
-        send_order_notification(
-            customer_name=form.name.data,
-            additional_info=form.info.data,
-            file_paths=saved_file_paths
-        )
-
-        print("[SUCCESS] All files processed and successfully committed to disk architecture.")
+        # 3. RETURN IMMEDIATELY TO THE BROWSER
+        print("[SUCCESS] Handed off to background worker. Responding to client instantly.")
         if ajax:
             return jsonify(success=True)
         return redirect(url_for("success"))

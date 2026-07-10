@@ -7,7 +7,7 @@ ENV PYTHONUNBUFFERED=1 \
 # procps: gives us pkill/pgrep for entrypoint.sh.
 # curl/gnupg2/ca-certificates: needed to add Syncthing's official apt repo.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl gnupg2 ca-certificates supervisor procps \
+        curl gnupg2 ca-certificates supervisor procps libreoffice\
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL -o /etc/apt/keyrings/syncthing-archive-keyring.gpg https://syncthing.net/release-key.gpg \
     && echo "deb [signed-by=/etc/apt/keyrings/syncthing-archive-keyring.gpg] https://apt.syncthing.net/ syncthing stable" \
